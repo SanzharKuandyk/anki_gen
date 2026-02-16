@@ -8,23 +8,23 @@ pub struct Cli {
     pub command: Commands,
 
     /// Ollama model name
-    #[arg(long, default_value = "llama3", global = true)]
-    pub model: String,
+    #[arg(long, global = true)]
+    pub model: Option<String>,
 
     /// Ollama API URL
-    #[arg(long, default_value = "http://localhost:11434", global = true)]
-    pub ollama_url: String,
+    #[arg(long, global = true)]
+    pub ollama_url: Option<String>,
 
     /// AnkiConnect URL
-    #[arg(long, default_value = "http://localhost:8765", global = true)]
-    pub anki_url: String,
+    #[arg(long, global = true)]
+    pub anki_url: Option<String>,
 
     /// Anki deck name
     #[arg(long, short)]
     pub deck: Option<String>,
 
     /// Anki note type
-    #[arg(long, short, default_value = "Kiku")]
+    #[arg(long, short)]
     pub note_type: Option<String>,
 
     /// Card fields (comma-separated)
@@ -50,5 +50,11 @@ pub enum Commands {
     Batch {
         /// Comma-separated list of items, or @filename to read from file
         items: String,
+    },
+    /// Generate example configuration file
+    Config {
+        /// Output format (yaml or json)
+        #[arg(long, short, default_value = "yaml")]
+        format: String,
     },
 }

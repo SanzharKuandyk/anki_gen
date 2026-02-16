@@ -25,16 +25,60 @@ anki_gen batch "@items.txt" -d "Deck" -f "Front,Back"
 
 ## Configuration
 
+Configuration is loaded with the following priority (highest to lowest):
+1. **CLI arguments** (e.g., `--model`, `--deck`)
+2. **Config file** (`config.yaml` or `config.json`)
+3. **Default values** (defined in code)
+
+### Config File
+
+Create a `config.yaml` or `config.json` in the project root:
+
+```yaml
+# config.yaml
+model: llama3
+ollama_url: http://localhost:11434
+anki_url: http://localhost:8765
+deck: Japanese
+note_type: Kiku
+fields:
+  - Grammar
+  - Meaning
+  - Example
+storage_path: storage/used_grammar.json
+```
+
+Or JSON:
+```json
+{
+  "model": "llama3",
+  "ollama_url": "http://localhost:11434",
+  "anki_url": "http://localhost:8765",
+  "deck": "Japanese",
+  "note_type": "Kiku",
+  "fields": ["Grammar", "Meaning", "Example"],
+  "storage_path": "storage/used_grammar.json"
+}
+```
+
+See `config.example.yaml` or `config.example.json` for templates.
+
+### CLI Overrides
+
+Any CLI argument will override the config file:
+
+```bash
+# Uses config file defaults, but overrides deck
+anki_gen generate "..." -d "CustomDeck"
+
+# Uses different model
+anki_gen generate "..." --model gemma2
+```
+
 Default note type is "Kiku" (check out [youyoumu/kiku](https://github.com/youyoumu/kiku) - very cool note). Specify your own with `-n`:
 
 ```bash
 anki_gen generate "..." -d "Deck" -f "Front,Back" -n "Basic"
-```
-
-Use any model via `--ollama-url` and `--model` flags:
-
-```bash
-anki_gen generate "..." --ollama-url http://your-model-api:1234 --model your-model
 ```
 
 Tested with llama3 (usually bugs). YMMV with other models.

@@ -1,0 +1,25 @@
+# Anki Gen Configuration File
+# Copy this file to config.yaml and customize as needed
+# CLI arguments will override these settings
+
+# LLM Configuration
+model: llama3
+ollama_url: http://localhost:11434
+
+# AnkiConnect Configuration
+anki_url: http://localhost:8765
+
+# Default Deck (optional, can be overridden with --deck)
+# deck: Japanese
+
+# Default Note Type
+note_type: Kiku
+
+# Default Fields (optional, can be overridden with --fields)
+# fields:
+#   - Grammar
+#   - Meaning
+#   - Example
+
+# Storage path for tracking generated cards
+storage_path: storage/used_grammar.json

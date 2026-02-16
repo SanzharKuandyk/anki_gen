@@ -1,0 +1,9 @@
+{
+  "model": "llama3",
+  "ollama_url": "http://localhost:11434",
+  "anki_url": "http://localhost:8765",
+  "deck": null,
+  "note_type": "Kiku",
+  "fields": [],
+  "storage_path": "storage/used_grammar.json"
+}

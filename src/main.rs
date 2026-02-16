@@ -1,5 +1,6 @@
 mod anki_client;
 mod cli;
+mod config;
 mod engine;
 mod errors;
 mod model_client;
@@ -13,6 +14,7 @@ use clap::Parser;
 
 use anki_client::AnkiConnectClient;
 use cli::{Cli, Commands};
+use config::Config;
 use engine::Engine;
 use model_client::OllamaClient;
 use storage::FileStorage;
@@ -20,38 +22,46 @@ use types::CardRequest;
 
 #[tokio::main]
 async fn main() {
+    // Load config with priority: CLI args > config file > defaults
+    let mut config = Config::load_or_default();
     let cli = Cli::parse();
+    config.merge_cli_overrides(&cli);
 
-    let model = OllamaClient::new(cli.ollama_url, cli.model);
-    let anki = AnkiConnectClient::new(cli.anki_url);
+    let model = OllamaClient::new(config.ollama_url.clone(), config.model.clone());
+    let anki = AnkiConnectClient::new(config.anki_url.clone());
 
-    if matches!(cli.command, Commands::Check) {
-        run_check(&model, &anki).await;
-        return;
+    // Handle commands that don't need full config
+    match &cli.command {
+        Commands::Check => {
+            run_check(&model, &anki).await;
+            return;
+        }
+        Commands::Config { format } => {
+            generate_config_file(format);
+            return;
+        }
+        _ => {}
     }
 
-    let deck = cli.deck.unwrap_or_else(|| {
-        eprintln!("Error: --deck is required for this command");
+    let deck = config.deck.clone().unwrap_or_else(|| {
+        eprintln!("Error: --deck is required for this command (set via CLI or config file)");
         std::process::exit(1);
     });
-    let note_type = cli.note_type.unwrap_or_else(|| {
-        eprintln!("Error: --note-type is required for this command");
-        std::process::exit(1);
-    });
-    if cli.fields.is_empty() {
-        eprintln!("Error: --fields is required for this command");
+    let note_type = config.note_type.clone();
+    if config.fields.is_empty() {
+        eprintln!("Error: --fields is required for this command (set via CLI or config file)");
         std::process::exit(1);
     }
 
-    let storage = FileStorage::new(PathBuf::from("storage/used_grammar.json"));
+    let storage = FileStorage::new(PathBuf::from(&config.storage_path));
     let engine = Engine::new(model, anki, storage);
 
     let result = match cli.command {
-        Commands::Check => unreachable!(),
+        Commands::Check | Commands::Config { .. } => unreachable!(),
         Commands::Generate { description } => {
             let req = CardRequest {
                 description,
-                fields: cli.fields,
+                fields: config.fields.clone(),
                 note_type,
                 deck,
             };
@@ -60,7 +70,7 @@ async fn main() {
         Commands::Next { description } => {
             let req = CardRequest {
                 description,
-                fields: cli.fields,
+                fields: config.fields.clone(),
                 note_type,
                 deck,
             };
@@ -70,7 +80,7 @@ async fn main() {
             let item_list = parse_items(&items);
             let req = CardRequest {
                 description: String::new(),
-                fields: cli.fields,
+                fields: config.fields.clone(),
                 note_type,
                 deck,
             };
@@ -143,4 +153,18 @@ fn parse_items(input: &str) -> Vec<String> {
             .filter(|s| !s.is_empty())
             .collect()
     }
+}
+
+fn generate_config_file(format: &str) {
+    let (content, filename) = match format.to_lowercase().as_str() {
+        "json" => (Config::generate_example_json(), "config.json"),
+        "yaml" | "yml" => (Config::generate_example_yaml(), "config.yaml"),
+        _ => {
+            eprintln!("Error: Unknown format '{}'. Use 'yaml' or 'json'.", format);
+            std::process::exit(1);
+        }
+    };
+
+    println!("{}", content);
+    println!("\n# To use this config, save it to '{}'", filename);
 }
