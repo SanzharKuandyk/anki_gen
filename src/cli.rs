@@ -30,6 +30,10 @@ pub struct Cli {
     /// Card fields (comma-separated)
     #[arg(long, short, value_delimiter = ',')]
     pub fields: Vec<String>,
+
+    /// Allow optional fields (model can skip or leave empty non-crucial fields)
+    #[arg(long)]
+    pub optional_fields: bool,
 }
 
 #[derive(Subcommand)]

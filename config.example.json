@@ -5,5 +5,6 @@
   "deck": null,
   "note_type": "Kiku",
   "fields": [],
-  "storage_path": "storage/used_grammar.json"
+  "storage_path": "storage/used_grammar.json",
+  "optional_fields": false
 }

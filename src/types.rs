@@ -8,6 +8,7 @@ pub struct CardRequest {
     pub fields: Vec<String>,
     pub note_type: String,
     pub deck: String,
+    pub optional_fields: bool,
 }
 
 /// The model's output — field name to field value.

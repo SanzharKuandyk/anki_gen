@@ -23,3 +23,8 @@ note_type: Kiku
 
 # Storage path for tracking generated cards
 storage_path: storage/used_grammar.json
+
+# Optional fields mode - allows model to skip/leave empty non-crucial fields
+# When true: model can omit fields that aren't relevant
+# When false (default): all fields must be filled
+optional_fields: false

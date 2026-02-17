@@ -24,6 +24,9 @@ pub struct Config {
 
     #[serde(default = "default_storage_path")]
     pub storage_path: String,
+
+    #[serde(default = "default_optional_fields")]
+    pub optional_fields: bool,
 }
 
 // Default value functions
@@ -47,6 +50,10 @@ fn default_storage_path() -> String {
     "storage/used_grammar.json".to_string()
 }
 
+fn default_optional_fields() -> bool {
+    false
+}
+
 impl Default for Config {
     fn default() -> Self {
         Config {
@@ -57,6 +64,7 @@ impl Default for Config {
             note_type: default_note_type(),
             fields: Vec::new(),
             storage_path: default_storage_path(),
+            optional_fields: default_optional_fields(),
         }
     }
 }
@@ -136,6 +144,11 @@ impl Config {
 
         if !cli.fields.is_empty() {
             self.fields = cli.fields.clone();
+        }
+
+        // CLI flag always overrides if present (default is false)
+        if cli.optional_fields {
+            self.optional_fields = true;
         }
     }
 

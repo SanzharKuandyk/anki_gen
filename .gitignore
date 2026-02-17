@@ -7,3 +7,4 @@ config.yml
 config.json
 .anki_gen.yaml
 .anki_gen.json
+items.txt

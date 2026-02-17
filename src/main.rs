@@ -48,10 +48,29 @@ async fn main() {
         std::process::exit(1);
     });
     let note_type = config.note_type.clone();
-    if config.fields.is_empty() {
-        eprintln!("Error: --fields is required for this command (set via CLI or config file)");
-        std::process::exit(1);
-    }
+
+    // If fields not specified, auto-detect from note type
+    let fields = if config.fields.is_empty() {
+        eprintln!("No fields specified, auto-detecting from note type '{}'...", note_type);
+        match anki.get_model_field_names(&note_type).await {
+            Ok(all_fields) => {
+                eprintln!("Auto-detected {} fields: {}", all_fields.len(), all_fields.join(", "));
+                if config.optional_fields {
+                    eprintln!("Using optional mode - model will fill only relevant fields");
+                } else {
+                    eprintln!("Using strict mode - model must fill all fields (consider --optional-fields)");
+                }
+                all_fields
+            }
+            Err(e) => {
+                eprintln!("Error: Could not get fields for note type '{}': {}", note_type, e);
+                eprintln!("Either specify --fields explicitly or ensure the note type exists in Anki");
+                std::process::exit(1);
+            }
+        }
+    } else {
+        config.fields.clone()
+    };
 
     let storage = FileStorage::new(PathBuf::from(&config.storage_path));
     let engine = Engine::new(model, anki, storage);
@@ -61,18 +80,20 @@ async fn main() {
         Commands::Generate { description } => {
             let req = CardRequest {
                 description,
-                fields: config.fields.clone(),
+                fields: fields.clone(),
                 note_type,
                 deck,
+                optional_fields: config.optional_fields,
             };
             engine.generate(&req).await
         }
         Commands::Next { description } => {
             let req = CardRequest {
                 description,
-                fields: config.fields.clone(),
+                fields: fields.clone(),
                 note_type,
                 deck,
+                optional_fields: config.optional_fields,
             };
             engine.next(&req).await
         }
@@ -80,9 +101,10 @@ async fn main() {
             let item_list = parse_items(&items);
             let req = CardRequest {
                 description: String::new(),
-                fields: config.fields.clone(),
+                fields: fields.clone(),
                 note_type,
                 deck,
+                optional_fields: config.optional_fields,
             };
             engine.batch(&req, &item_list).await
         }
@@ -134,25 +156,37 @@ async fn run_check(model: &OllamaClient, anki: &AnkiConnectClient) {
 }
 
 fn parse_items(input: &str) -> Vec<String> {
-    if let Some(path) = input.strip_prefix('@') {
+    let items = if let Some(path) = input.strip_prefix('@') {
         match std::fs::read_to_string(path) {
-            Ok(content) => content
-                .lines()
-                .map(|l| l.trim().to_string())
-                .filter(|l| !l.is_empty())
-                .collect(),
+            Ok(content) => {
+                let items: Vec<String> = content
+                    .lines()
+                    .map(|l| l.trim().to_string())
+                    .filter(|l| !l.is_empty())
+                    .collect();
+                eprintln!("Loaded {} items from file '{}'", items.len(), path);
+                items
+            }
             Err(e) => {
                 eprintln!("Error reading file '{}': {}", path, e);
                 std::process::exit(1);
             }
         }
     } else {
-        input
+        let items: Vec<String> = input
             .split(',')
             .map(|s| s.trim().to_string())
             .filter(|s| !s.is_empty())
-            .collect()
+            .collect();
+        eprintln!("Parsed {} items from input", items.len());
+        items
+    };
+
+    if items.is_empty() {
+        eprintln!("Warning: No items to process!");
     }
+
+    items
 }
 
 fn generate_config_file(format: &str) {

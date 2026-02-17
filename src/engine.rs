@@ -57,29 +57,44 @@ impl Engine {
         result
     }
 
-    fn validate_fields(fields: &CardFields, expected: &[String]) -> Result<(), AppError> {
-        let missing: Vec<&String> = expected
-            .iter()
-            .filter(|f| !fields.contains_key(f.as_str()))
-            .collect();
+    fn validate_fields(
+        fields: &CardFields,
+        expected: &[String],
+        optional: bool,
+    ) -> Result<(), AppError> {
+        if optional {
+            // In optional mode, just check that at least one field has content
+            let has_content = fields.values().any(|v| !v.trim().is_empty());
+            if !has_content {
+                return Err(AppError::Model(
+                    "Model returned no content in any field".into(),
+                ));
+            }
+        } else {
+            // Strict mode: all expected fields must be present and non-empty
+            let missing: Vec<&String> = expected
+                .iter()
+                .filter(|f| !fields.contains_key(f.as_str()))
+                .collect();
 
-        if !missing.is_empty() {
-            return Err(AppError::Model(format!(
-                "Model response missing fields: {}. Got: {}",
-                missing
-                    .iter()
-                    .map(|s| s.as_str())
-                    .collect::<Vec<_>>()
-                    .join(", "),
-                fields.keys().cloned().collect::<Vec<_>>().join(", "),
-            )));
-        }
+            if !missing.is_empty() {
+                return Err(AppError::Model(format!(
+                    "Model response missing fields: {}. Got: {}",
+                    missing
+                        .iter()
+                        .map(|s| s.as_str())
+                        .collect::<Vec<_>>()
+                        .join(", "),
+                    fields.keys().cloned().collect::<Vec<_>>().join(", "),
+                )));
+            }
 
-        let all_empty = expected
-            .iter()
-            .all(|f| fields.get(f.as_str()).map_or(true, |v| v.is_empty()));
-        if all_empty {
-            return Err(AppError::Model("Model returned all empty fields".into()));
+            let all_empty = expected
+                .iter()
+                .all(|f| fields.get(f.as_str()).map_or(true, |v| v.is_empty()));
+            if all_empty {
+                return Err(AppError::Model("Model returned all empty fields".into()));
+            }
         }
 
         Ok(())
@@ -110,7 +125,7 @@ impl Engine {
 
         let fields = self.model.generate(&prompt, &req.fields).await?;
         let fields = Self::fix_field_names(fields, &req.fields);
-        Self::validate_fields(&fields, &req.fields)?;
+        Self::validate_fields(&fields, &req.fields, req.optional_fields)?;
         println!("Generated fields: {:?}", fields);
 
         self.anki
@@ -137,7 +152,7 @@ impl Engine {
 
         let fields = self.model.generate(&prompt, &req.fields).await?;
         let fields = Self::fix_field_names(fields, &req.fields);
-        Self::validate_fields(&fields, &req.fields)?;
+        Self::validate_fields(&fields, &req.fields, req.optional_fields)?;
         println!("Generated fields: {:?}", fields);
 
         self.anki
@@ -164,6 +179,10 @@ impl Engine {
         let mut history = self.storage.load_history()?;
         let total = items.len();
 
+        let mut succeeded = 0;
+        let mut failed = 0;
+        let mut errors: Vec<(String, String)> = Vec::new();
+
         for (i, item) in items.iter().enumerate() {
             println!("[{}/{}] Generating: {}", i + 1, total, item);
 
@@ -172,24 +191,52 @@ impl Engine {
                 fields: req.fields.clone(),
                 note_type: req.note_type.clone(),
                 deck: req.deck.clone(),
+                optional_fields: req.optional_fields,
             };
 
-            let prompt = PromptBuilder::build(&item_req);
-            let fields = self.model.generate(&prompt, &req.fields).await?;
-            let fields = Self::fix_field_names(fields, &req.fields);
-            Self::validate_fields(&fields, &req.fields)?;
+            let result = async {
+                let prompt = PromptBuilder::build(&item_req);
+                let fields = self.model.generate(&prompt, &req.fields).await?;
+                let fields = Self::fix_field_names(fields, &req.fields);
+                Self::validate_fields(&fields, &req.fields, req.optional_fields)?;
 
-            self.anki
-                .add_note(&fields, &req.note_type, &req.deck, &all_fields)
-                .await?;
-            println!("  Added to Anki");
+                self.anki
+                    .add_note(&fields, &req.note_type, &req.deck, &all_fields)
+                    .await?;
 
-            history.used_items.push(item.clone());
+                Ok::<(), AppError>(())
+            }
+            .await;
+
+            match result {
+                Ok(_) => {
+                    println!("  ✓ Added to Anki");
+                    history.used_items.push(item.clone());
+                    succeeded += 1;
+                }
+                Err(e) => {
+                    println!("  ✗ Failed: {}", e);
+                    errors.push((item.clone(), e.to_string()));
+                    failed += 1;
+                }
+            }
         }
 
         self.storage.save_history(&history)?;
-        println!("Batch complete: {} cards added", total);
 
-        Ok(())
+        println!("\nBatch complete: {} succeeded, {} failed out of {}", succeeded, failed, total);
+
+        if !errors.is_empty() {
+            println!("\nFailed items:");
+            for (item, error) in &errors {
+                println!("  - {}: {}", item, error);
+            }
+        }
+
+        if succeeded == 0 {
+            Err(AppError::Model("All batch items failed".into()))
+        } else {
+            Ok(())
+        }
     }
 }
